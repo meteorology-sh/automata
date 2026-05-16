@@ -26,4 +26,4 @@ checkpoints:
   keep_best: true # always keep the highest reward checkpoint
 visualizer:
   enabled: true
-  update_every: 1 # update dashboard every N steps
+  action_labels: ["Left", "Right"]

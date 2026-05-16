@@ -1,7 +1,18 @@
 import argparse
+import importlib
 from core.train import load_config, train
 from core.visualizer import Visualizer
 from envs.base_env import GymEnv
+
+
+def build_env(config: dict):
+    """Build the environment from config. Uses GymEnv unless env.wrapper specifies a custom class."""
+    wrapper = config["env"].get("wrapper")
+    if wrapper is None:
+        return GymEnv(config)
+    module_path, class_name = wrapper.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)(config)
 
 
 def main():
@@ -13,12 +24,13 @@ def main():
 
     config = load_config(args.config)
 
-    env = GymEnv(config)
+    env = build_env(config)
 
     visualizer = None
     if not args.no_vis and config["visualizer"]["enabled"]:
         num_actions = config["model"]["num_actions"]
-        visualizer = Visualizer(num_actions=num_actions)
+        action_labels = config["visualizer"].get("action_labels")
+        visualizer = Visualizer(num_actions=num_actions, action_labels=action_labels)
         visualizer.start()
 
     try:

@@ -1,0 +1,30 @@
+# RL Harness — Acrobot-v1 Configuration
+# Swing the lower link up to reach the target height.
+# Reward: -1 per step. Solved when avg reward > -100 (i.e. < 100 steps).
+env:
+  name: "Acrobot-v1"
+  image_size: 224
+  max_episode_steps: 500
+model:
+  type: "mlp"
+  hidden_size: 128
+  num_actions: 3 # torque: -1, 0, +1
+  state_size: 6 # cos(θ1), sin(θ1), cos(θ2), sin(θ2), θ1_dot, θ2_dot
+training:
+  episodes: 1500
+  batch_size: 64
+  lr: 0.0005
+  gamma: 0.99
+  memory_size: 50000
+  solve_threshold: -100
+epsilon:
+  start: 1.0
+  min: 0.01
+  decay: 0.997
+checkpoints:
+  dir: "checkpoints/"
+  save_every: 100
+  keep_best: true
+visualizer:
+  enabled: true
+  action_labels: ["Torque -1", "None", "Torque +1"]

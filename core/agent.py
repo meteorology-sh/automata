@@ -1,4 +1,5 @@
 import random
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -45,8 +46,8 @@ class DQNAgent:
         batch = self.memory.sample(self.batch_size)
         states, actions, rewards, next_states, dones = zip(*batch)
 
-        states = torch.tensor(states, dtype=torch.float32)
-        next_states = torch.tensor(next_states, dtype=torch.float32)
+        states = torch.tensor(np.array(states), dtype=torch.float32)
+        next_states = torch.tensor(np.array(next_states), dtype=torch.float32)
         actions = torch.tensor(actions)
         rewards = torch.tensor(rewards, dtype=torch.float32)
         dones = torch.tensor(dones, dtype=torch.float32)

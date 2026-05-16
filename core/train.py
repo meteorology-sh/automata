@@ -1,3 +1,4 @@
+import os
 import torch
 import yaml
 from collections import deque
@@ -51,6 +52,8 @@ def train(env: BaseEnv, config: dict, visualizer=None):
     model_type = config["model"]["type"]
     env_name = config["env"]["name"]
 
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
     recent_rewards = deque(maxlen=100)
     best_avg_reward = float("-inf")
 
@@ -83,13 +86,13 @@ def train(env: BaseEnv, config: dict, visualizer=None):
             f"Episode {episode:4d} | reward: {total_reward:6.1f} | avg: {avg_reward:6.1f} | epsilon: {agent.epsilon:.3f}")
 
         if episode % save_every == 0:
-            path = f"{checkpoint_dir}{env_name}_{episode}.pt"
+            path = os.path.join(checkpoint_dir, f"{env_name}_{episode}.pt")
             torch.save(model.state_dict(), path)
 
         if config["checkpoints"]["keep_best"] and avg_reward > best_avg_reward:
             best_avg_reward = avg_reward
             torch.save(model.state_dict(),
-                       f"{checkpoint_dir}{env_name}_best.pt")
+                       os.path.join(checkpoint_dir, f"{env_name}_best.pt"))
 
         if len(recent_rewards) == 100 and avg_reward >= solve_threshold:
             print(
