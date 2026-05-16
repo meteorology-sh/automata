@@ -1,0 +1,29 @@
+# RL Harness — Default Configuration
+# Override any value by creating configs/your_env.yaml
+env:
+  name: "CartPole-v1"
+  image_size: 224 # only used for CNN model
+  max_episode_steps: 500 # cutoff if env doesn't terminate naturally
+model:
+  type: "mlp" # "mlp" for vector states, "cnn" for image states
+  hidden_size: 128 # MLP hidden layer size
+  num_actions: 2 # must match your environment's action space
+  state_size: 4 # CartPole has 4 observations
+training:
+  episodes: 1000
+  batch_size: 32
+  lr: 0.0001
+  gamma: 0.99 # discount factor
+  memory_size: 10000 # replay buffer capacity
+  solve_threshold: 475 # avg reward over last 100 episodes to consider solved
+epsilon:
+  start: 1.0
+  min: 0.01
+  decay: 0.995
+checkpoints:
+  dir: "checkpoints/"
+  save_every: 100 # save a checkpoint every N episodes
+  keep_best: true # always keep the highest reward checkpoint
+visualizer:
+  enabled: true
+  update_every: 1 # update dashboard every N steps

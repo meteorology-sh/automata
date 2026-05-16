@@ -1,122 +1,155 @@
-## Data Structures
+# Reinforcement Learning Harness — Key Ingredients
 
-### Images as Data
+A general reference for building an agentic RL framework that can be adapted to any robotics system.
 
-An image is a three-dimensional array of numbers, having a height, width, and channels. These channels are arrays with values for blue, green, and red.
+---
 
-The first step is commonly converting the channels into a single channel, in grayscale. Next, the images are downsized, depending on what kinds of outcomes are desirable. A roomba may need less dimensionality, whereas a drone may need more. The size of the image corresponds to the quality of resolution and data interpretable by the program.
+## The Core Idea
 
-We can train existing models by fine tuning on specific data, in a process called transfer learning.
+An RL harness connects three things: a **perception model** (how the agent sees), a **decision model** (how the agent acts), and an **environment** (what the agent interacts with). Given any robotics system, your job is to define each of these clearly before writing any code.
 
-Further, images are normalized, so the pixel values are transformed from 0-255 to 0 to 1.
+---
 
-- An image is a (H, W, 3) array of pixel values
-- Grayscale collapses the channels to (H, W)
-- We resize to a fixed input size the model expects
-- We normalize to 0–1 to make training stable
-- Color vs grayscale is a deliberate choice based on the task
-- Images are analyzed in batches, giving input matrices a rank 4
+## Ingredient 1 — State Representation
 
-### Vectors, Matrices, and Tensors
+The state is what the agent observes at each timestep. Ask:
 
-- A single number → scalar (rank 0)
-- A 1D array → vector (rank 1)
-- A 2D array → matrix (rank 2)
-- A 3D+ array → tensor (rank 3+)
+- What sensors does the robot have? (camera, lidar, IMU, GPS)
+- What format is the data in? (image tensor, numerical vector, point cloud)
+- Does the agent need memory? (a single frame, or a sequence of frames)
 
-[batch, channel, height, width]
+**If the state is an image**, preprocess it into a normalized tensor:
 
-### Convolutional Neural Networks
+1. Convert color space if needed (BGR → RGB for PyTorch)
+2. Resize to a fixed resolution (224×224 for pretrained CNNs, smaller for speed)
+3. Normalize pixel values to [0, 1]
+4. Reshape to `(batch, channels, height, width)`
 
-A CNN is the mechanism through which raw pixels are categorized according to some ontology. A convolution slides a small grid -- called a filter or kernel -- across an image, and at each step determines whether a pattern exists. The output is a feature map.
+**If the state is a numerical vector** (e.g. position, velocity, sensor readings), normalize each dimension to a consistent range and feed directly to a fully connected network.
 
-The network learns these filters during training. Early layers learn simply things like edgesss and corners, whereass deeper layers combine them into complex things like "car", or "house".
+---
 
-That hierarchy looks something like:
+## Ingredient 2 — Perception Model (CNN)
 
-- Layer 1 → edges, color gradients
-- Layer 2 → shapes, corners
-- Layer 3+ → objects, structures
-
-### Logits
-
-The output of a CNN are raw scores, called logits, that can be any value, positive or negative. We turn them into probabilities that sum to 1 by passing them into a softmax function.
-
-## Reinforcement Learning
-
-The core idea is that the drone acts in a loop:
+Used when the state contains visual input. The CNN extracts meaningful features from raw pixels so the decision model doesn't have to reason about individual pixel values.
 
 ```
-observe state → take action → receive reward → observe new state → repeat
+Input image → Convolutional layers → Feature maps → Flatten → Feature vector
 ```
 
-For a drone:
+Key decisions:
 
-- State — the current camera frame (our image tensor)
-- Action — something like move forward, turn left, turn right, ascend, descend
-- Reward — a score we define, e.g. +1 for covering new ground, -10 for hitting something
-- Episode — one full run, from takeoff to crash or landing
+- **Pretrained vs from scratch**: use a pretrained backbone (ResNet, EfficientNet) when you need object recognition or have limited data. Train from scratch when the visual domain is very different from natural images (e.g. aerial maps, thermal imaging).
+- **Output**: the CNN should output a flat feature vector, not class probabilities. No softmax.
+- **Input resolution**: higher resolution preserves detail but increases compute. Match to task complexity.
 
-The goal of the agent is to learn a policy: A strategy for choosing actions that maximizes the total reward over time. This training takes place in a virtual environment, like `Gymnasium` or `PyBullet` or `AirSim`.
+---
 
-### Training
+## Ingredient 3 — Decision Model (DQN or Policy Network)
 
-During training, the policy is guided by something called the `Q-value`. A Q-value answerss the question, given the current state, how much total reward can the model expect if it takes action.
+Takes the feature vector from the CNN (or raw state vector) and outputs action values.
+
+**Deep Q-Network (DQN)** — outputs one Q-value per action. Agent picks the highest.
+
+- Best for: discrete action spaces (turn left, turn right, stop)
+- Output: raw logits, no softmax
+
+**Policy gradient methods** (e.g. PPO) — outputs a probability distribution over actions.
+
+- Best for: continuous action spaces (exact thrust, exact angle)
+- Better for complex real-world robotics but harder to implement
+
+For most robotics systems, start with DQN if actions are discrete, PPO if continuous.
+
+---
+
+## Ingredient 4 — Environment Interface
+
+Wrap your simulator (or real robot) in a Gymnasium-compatible interface:
+
+```python
+class RobotEnv(gym.Env):
+    def reset(self):
+        # return initial state, info
+
+    def step(self, action):
+        # apply action, return (next_state, reward, done, truncated, info)
+
+    def render(self):
+        # optional visualization
+```
+
+Key decisions:
+
+- **Action space**: what can the robot actually do? Define minimum viable actions.
+- **Episode termination**: when does a run end? (crash, goal reached, time limit)
+- **Simulator fidelity**: higher fidelity = better sim-to-real transfer, more compute cost
+
+---
+
+## Ingredient 5 — Reward Function
+
+The only way you communicate intent to the agent. Design it carefully.
+
+A general template:
+
+```python
+reward = 0
+reward += w1 * progress_toward_goal     # what you want
+reward -= w2 * unsafe_behavior          # what you don't want
+reward += w3 * int(goal_reached)        # terminal success
+reward -= w4 * int(failed)              # terminal failure
+```
+
+Principles:
+
+- **Think adversarially**: ask "how would an amoral optimizer game this reward?"
+- **Balance components**: no single term should dominate
+- **Prefer goal rewards over proxy rewards**: reward reaching the destination, not just moving forward
+- **Clip rewards** to a fixed range (e.g. [-1, 1]) for training stability
+
+---
+
+## Ingredient 6 — Training Loop
+
+The standard DQN training loop:
 
 ```
-Q(state, action) → expected future reward
+for each episode:
+    state = env.reset()
+    while not done:
+        action = select_action(state, epsilon)   # epsilon-greedy
+        next_state, reward, done = env.step(action)
+        memory.append((state, action, reward, next_state, done))
+        train_on_batch(memory)                   # sample random batch, Bellman update
+        state = next_state
+    decay epsilon
 ```
 
-The drone takes the action with the highest Q-value. That's the policy. The agent has to learn the rules for Q-values through training, and it does so through an update rule called the Bellman equation:
+Key components:
 
+- **Replay buffer**: stores past experiences, breaks temporal correlation, enables experience reuse
+- **Epsilon-greedy**: start ~1.0 (random), decay toward ~0.01 (greedy). Controls explore/exploit balance
+- **Batch training**: sample randomly from replay buffer each step, not sequentially
+- **Target network**: a slowly updated copy of the model used to compute `target_q`, prevents instability (omitted in basic implementations, important in production)
+
+---
+
+## Ingredient 7 — Stopping Criteria and Checkpointing
+
+Don't rely on loss alone — use episode reward as the primary signal.
+
+```python
+if avg_reward_last_100_episodes > threshold:
+    # solved
+
+torch.save(model.state_dict(), "checkpoint.pt")  # save periodically
 ```
-Q(state, action) = reward + (discount × best Q-value in next state)
-```
 
-The discount is usually _0.99_, but otherwise a number between 0 and 1 that makes the agent slightly prefer immediate rewards over distant ones. This is essential because avoiding a collision is an immediate and higher priority goal than whatever the drone was set out to do in the first place.
+Stopping criteria:
 
-The learning loop therefore takes the following form:
+1. Performance threshold reached
+2. Reward has plateaued
+3. Compute budget exhausted
 
-- Observe state
-- Pick action with highest Q-value
-- Receive reward, land in new state
-- Update Q-values using the Bellman equation
-- Repeat
-
-### Epsilon Greed
-
-If an agent always picks the action with the highest Q-value, it will only ever exploit options that it already knows, and not learn new things. The solution is exploration versus exploitation, controlled by epsilon greed.
-
-- With probability epsilon (ε) — take a random action (explore)
-- With probability 1 - ε — take the best known action (exploit)
-
-The training session starts with ε close to 1 (almost fully random) and decay it over time as the agent builds up knowledge. Early on the drone flails around randomly, gradually becoming more deliberate as it learns which actions lead to good rewards.
-
-In summary, training looks like this:
-
-- The agent/environment/state/action/reward loop
-- Q-values as a measure of action quality
-- The Bellman equation as the update rule
-- Epsilon-greedy as the exploration strategy
-
-## Deep Q-Networks (DQN)
-
-The insight behind a DQN is that we can use a CNN to approximate Q-values instead of a table. Given an image, we feed it through a CNN that outputs a Q-value for every possibible action simultaneously.
-
-The DQN doesn't apply the softmax anymore, because we don't want to normalize the options. In fact we want to know the relative value of our options, like turning left versus right.
-
-### Replay Buffer
-
-The replay buffer is a random sample of other experiences that introduces a diverse range of experiences during its training regimen, rather than its sequential order. It's like flash cards.
-
-## Reward Shaping and Training
-
-The core challenge is the reward signal is the only way you communicate intentions to the agent. There is some parallel here to prompt engineering: If you're not careful, the agent will get creative to serve its goals.
-
-The broader lesson is that reward shaping requires you to think adversarially about your own reward function -- asking "How would a completely amoral optimizer try to game this?" Whatever answer you come up with, the agent will probably find it eventually.
-
-The three practical stopping criteria are:
-
-1. Performance threshold — average reward consistently above some target
-2. Diminishing returns — reward has plateaued and isn't improving
-3. Budget — you've hit your compute or time limit and take the best model so far
+Always save the best-performing checkpoint, not just the final one.
