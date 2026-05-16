@@ -105,7 +105,18 @@ The insight behind a DQN is that we can use a CNN to approximate Q-values instea
 
 The DQN doesn't apply the softmax anymore, because we don't want to normalize the options. In fact we want to know the relative value of our options, like turning left versus right.
 
-✅ Lesson 1 — Images as data
-✅ Lesson 2 — CNNs and feature extraction
-✅ Lesson 3 — RL fundamentals
-🔄 Lesson 4 — DQN (in progress, just need to finish the training loop)
+### Replay Buffer
+
+The replay buffer is a random sample of other experiences that introduces a diverse range of experiences during its training regimen, rather than its sequential order. It's like flash cards.
+
+## Reward Shaping and Training
+
+The core challenge is the reward signal is the only way you communicate intentions to the agent. There is some parallel here to prompt engineering: If you're not careful, the agent will get creative to serve its goals.
+
+The broader lesson is that reward shaping requires you to think adversarially about your own reward function -- asking "How would a completely amoral optimizer try to game this?" Whatever answer you come up with, the agent will probably find it eventually.
+
+The three practical stopping criteria are:
+
+1. Performance threshold — average reward consistently above some target
+2. Diminishing returns — reward has plateaued and isn't improving
+3. Budget — you've hit your compute or time limit and take the best model so far
