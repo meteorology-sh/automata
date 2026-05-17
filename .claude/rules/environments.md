@@ -19,3 +19,6 @@ Never compute or shape rewards in the training loop. All reward logic goes in th
 
 ## Subclassing BaseEnv
 Every new environment must subclass `BaseEnv` from `envs/base_env.py`. Implement `reset()`, `step()`, and `get_state()`. Use the `env.wrapper` config key to select custom subclasses without modifying `main.py`.
+
+## Prefer environments with built-in rendering
+When an environment is not available in standard Gymnasium, look for a third-party Gymnasium-compatible package (e.g. PyFlyt for drones, gym-pybullet-drones, MuJoCo envs) before building custom physics. Wrap the third-party env in a `BaseEnv` subclass to handle reward shaping or action-space discretization, but let the underlying simulator handle rendering via the `render_mode` passthrough. Only build custom physics and rendering when no suitable simulator exists for the domain.
