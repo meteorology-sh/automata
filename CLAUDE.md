@@ -91,35 +91,37 @@ Design rewards inside `step()`. Follow these principles:
 All hyperparameters are read from `configs/default.yaml`:
 
 ```yaml
-epsilon_start: 1.0
+epsilon_start: 0.9
 epsilon_min: 0.01
 epsilon_decay: 0.995
 gamma: 0.99
-batch_size: 32
+batch_size: 128
 lr: 0.0001
 memory_size: 10000
+train_every: 1
+tau: 0.005
+solve_window: 50
 episodes: 1000
 image_size: 224
 ```
 
-Override per-project by creating `configs/your_env.yaml`.
+Override per-project by creating `configs/your_env.yaml`. See `SKILLS.md` for lessons on how these values interact.
 
 ### Stopping criteria
 
-The training loop stops when average reward over the last 100 episodes exceeds the threshold defined in config, or when the episode budget is exhausted. Always checkpoint the best-performing model.
+The training loop stops when average reward over the last `solve_window` episodes (default 50) exceeds `solve_threshold`, or when the episode budget is exhausted. Always checkpoint the best-performing model.
 
 ---
 
 ## Visualizer
 
-The visualizer is a real-time dashboard that any environment can plug into. It displays:
+The visualizer is a single-chart dashboard that runs in a background thread during training. It displays:
 
-- Live agent view (current state frame or vector readout)
-- Episode reward over time (rolling chart)
-- Current epsilon
-- Q-values for each action at the current state
+- Episode reward over time (rolling chart with solve threshold line)
+- Rolling average matching the `solve_window` (so the chart predicts when training stops)
+- Current epsilon as a decimal value in the title
 
-The visualizer receives updates via a callback — the training loop calls `visualizer.update(state, q_values, reward, epsilon)` at each step. It must not block training.
+The training loop calls `visualizer.end_episode(total_reward, epsilon)` once per episode. The visualizer must never add per-step computation to the training loop.
 
 ---
 

@@ -1,3 +1,4 @@
+import copy
 import random
 import numpy as np
 import torch
@@ -9,12 +10,17 @@ from core.memory import ReplayBuffer
 
 class DQNAgent:
     """
-    Epsilon-greedy DQN agent. Selects actions and learns from experience.
-    Works with any model that accepts a state tensor and outputs Q-values.
+    Epsilon-greedy DQN agent with a target network.
+
+    Uses a frozen copy of the model (target network) to compute target Q-values,
+    updated every target_update steps. This prevents the Q-value overestimation
+    that causes reward crashes in vanilla DQN.
     """
 
     def __init__(self, model: nn.Module, config: dict):
         self.model = model
+        self.target_model = copy.deepcopy(model)
+        self.target_model.eval()
         self.config = config
         self.num_actions = config["model"]["num_actions"]
 
@@ -24,11 +30,13 @@ class DQNAgent:
 
         self.gamma = config["training"]["gamma"]
         self.batch_size = config["training"]["batch_size"]
+        self.tau = config["training"].get("tau", 0.005)
 
         self.memory = ReplayBuffer(config["training"]["memory_size"])
         self.optimizer = optim.Adam(
             model.parameters(), lr=config["training"]["lr"])
-        self.loss_fn = nn.MSELoss()
+        self.loss_fn = nn.SmoothL1Loss()
+
 
     def select_action(self, state_tensor: torch.Tensor) -> int:
         if random.random() < self.epsilon:
@@ -54,13 +62,20 @@ class DQNAgent:
 
         current_q = self.model(states).gather(
             1, actions.unsqueeze(1)).squeeze()
-        next_q = self.model(next_states).max(1).values
+
+        with torch.no_grad():
+            next_q = self.target_model(next_states).max(1).values
         target_q = rewards + self.gamma * next_q * (1 - dones)
 
-        loss = self.loss_fn(current_q, target_q.detach())
+        loss = self.loss_fn(current_q, target_q)
         self.optimizer.zero_grad()
         loss.backward()
+        nn.utils.clip_grad_value_(self.model.parameters(), clip_value=100)
         self.optimizer.step()
+
+        # Soft update: blend online weights into target network
+        for target_p, online_p in zip(self.target_model.parameters(), self.model.parameters()):
+            target_p.data.mul_(1 - self.tau).add_(online_p.data * self.tau)
 
         return loss.item()
 

@@ -28,9 +28,9 @@ def main():
 
     visualizer = None
     if not args.no_vis and config["visualizer"]["enabled"]:
-        num_actions = config["model"]["num_actions"]
-        action_labels = config["visualizer"].get("action_labels")
-        visualizer = Visualizer(num_actions=num_actions, action_labels=action_labels)
+        solve_threshold = config["training"]["solve_threshold"]
+        solve_window = config["training"].get("solve_window", 50)
+        visualizer = Visualizer(solve_threshold=solve_threshold, solve_window=solve_window)
         visualizer.start()
 
     try:

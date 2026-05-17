@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import yaml
 
+from eval import evaluate
 from core.memory import ReplayBuffer
 from core.agent import DQNAgent
 from core.train import state_to_tensor
@@ -151,4 +152,27 @@ def test_gym_env_full_episode():
         assert isinstance(next_state, np.ndarray)
 
     assert steps > 0
+    env.close()
+
+
+# --- Eval ---
+
+def test_eval_headless():
+    config = _cartpole_config()
+    env = GymEnv(config)
+    model = MLP(state_size=4, num_actions=2, hidden_size=128)
+    rewards = evaluate(env, model, config, num_episodes=2)
+    assert len(rewards) == 2
+    assert all(isinstance(r, (int, float)) for r in rewards)
+
+
+def test_gym_env_render_mode_from_config():
+    config = _cartpole_config()
+    env = GymEnv(config)
+    assert env.env.render_mode is None
+    env.close()
+
+    config["env"]["render_mode"] = "rgb_array"
+    env = GymEnv(config)
+    assert env.env.render_mode == "rgb_array"
     env.close()

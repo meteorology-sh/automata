@@ -28,8 +28,28 @@ The visualizer is a 2x2 matplotlib dashboard that runs in a background thread du
 
 The dashboard is thread-safe and runs as a daemon thread, so it shuts down automatically when training ends. On Windows, if the window doesn't render, you may need to set the matplotlib backend to `TkAgg`.
 
+## Evaluating a Trained Agent
+
+After training, use `eval.py` to load a checkpoint and watch the agent perform:
+
+```bash
+python eval.py --config configs/default.yaml --checkpoint checkpoints/CartPole-v1_best.pt
+```
+
+This opens a rendering window and runs 10 episodes with greedy action selection (no exploration noise). Pass `--episodes N` to change the count, or `--no-render` for headless evaluation with reward stats only.
+
+## The Pipeline
+
+The harness is designed around a simulation-to-hardware pipeline:
+
+```
+Define env --> Train policy --> Evaluate in sim --> Export model --> Deploy to hardware
+```
+
+Today, the first three stages are supported. The trained `.pt` checkpoint is a set of neural network weights — the "brain" that turns sensor readings into actions. See [`PLAN.md`](PLAN.md) for the full roadmap toward model export and hardware deployment.
+
 ## Documentation
 
 - [`CLAUDE.md`](CLAUDE.md) — Architecture rules, project conventions, and how to extend the harness (add environments, choose models, design reward functions)
 - [`docs/README.md`](docs/README.md) — Detailed reference on DQN concepts, state representation, model selection, reward shaping, and sim-to-real considerations
-- [`PLAN.md`](PLAN.md) — Current roadmap from first look to working demo
+- [`PLAN.md`](PLAN.md) — Pipeline roadmap: from simulation to hardware deployment

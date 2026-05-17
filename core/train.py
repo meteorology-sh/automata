@@ -54,8 +54,11 @@ def train(env: BaseEnv, config: dict, visualizer=None):
 
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    recent_rewards = deque(maxlen=100)
+    train_every = config["training"].get("train_every", 4)
+    solve_window = config["training"].get("solve_window", 50)
+    recent_rewards = deque(maxlen=solve_window)
     best_avg_reward = float("-inf")
+    step_count = 0
 
     for episode in range(episodes):
         state = env.reset()
@@ -69,11 +72,9 @@ def train(env: BaseEnv, config: dict, visualizer=None):
             done = done or truncated
 
             agent.remember(state, action, reward, next_state, done)
-            loss = agent.train()
-
-            if visualizer:
-                q_values = model(state_tensor).detach().squeeze().tolist()
-                visualizer.update(state, q_values, reward, agent.epsilon, loss)
+            step_count += 1
+            if step_count % train_every == 0:
+                loss = agent.train()
 
             state = next_state
             total_reward += reward
@@ -81,6 +82,9 @@ def train(env: BaseEnv, config: dict, visualizer=None):
         agent.decay_epsilon()
         recent_rewards.append(total_reward)
         avg_reward = sum(recent_rewards) / len(recent_rewards)
+
+        if visualizer:
+            visualizer.end_episode(total_reward, agent.epsilon)
 
         print(
             f"Episode {episode:4d} | reward: {total_reward:6.1f} | avg: {avg_reward:6.1f} | epsilon: {agent.epsilon:.3f}")
@@ -94,7 +98,7 @@ def train(env: BaseEnv, config: dict, visualizer=None):
             torch.save(model.state_dict(),
                        os.path.join(checkpoint_dir, f"{env_name}_best.pt"))
 
-        if len(recent_rewards) == 100 and avg_reward >= solve_threshold:
+        if len(recent_rewards) == solve_window and avg_reward >= solve_threshold:
             print(
                 f"Solved at episode {episode} with avg reward {avg_reward:.1f}")
             break

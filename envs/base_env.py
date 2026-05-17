@@ -58,7 +58,8 @@ class GymEnv(BaseEnv):
 
     def __init__(self, config: dict):
         super().__init__(config)
-        self.env = gym.make(config["env"]["name"])
+        render_mode = config["env"].get("render_mode")
+        self.env = gym.make(config["env"]["name"], render_mode=render_mode)
 
     def reset(self) -> np.ndarray:
         self.episode_step = 0

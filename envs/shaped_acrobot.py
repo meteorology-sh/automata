@@ -20,7 +20,8 @@ class ShapedAcrobot(BaseEnv):
 
     def __init__(self, config: dict):
         super().__init__(config)
-        self.env = gym.make("Acrobot-v1")
+        render_mode = config["env"].get("render_mode")
+        self.env = gym.make("Acrobot-v1", render_mode=render_mode)
         self._state = None
 
     def reset(self) -> np.ndarray:
