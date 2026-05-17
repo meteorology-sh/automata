@@ -1,55 +1,90 @@
 # Automata
 
-This is an experimental workspace for developing a harness for reinforcement learning in autonomous robotics applications.
+Automata is a generic reinforcement learning harness for training DQN agents on simulated robots. Define a robot in MJCF XML, write a reward function, point it at a config, and train. The harness handles the training loop, replay buffer, epsilon scheduling, checkpointing, and visualization.
 
-## About
-
-Automata is a generic reinforcement learning harness for training DQN agents in any Gymnasium-compatible environment. Provides reusable training infrastructure, model architectures, and a real-time visualization dashboard.
+MuJoCo provides the physics and 3D rendering, while the harness runs training and policy definitions.
 
 ## Quick Start
 
+Automata ships with a default scenario in the form of [Gymnasium's Lunar Lander](https://gymnasium.farama.org/environments/box2d/lunar_lander/). Follow these instructions to install dependencies, train the model, and evaluate its performance.
+
+First, install [Python 3.12](https://www.python.org/downloads/release/python-31213/)
+
+Then, in the root directory, instantiate a virtual environment:
+
+```bash
+python3.12 -m venv venv
+source ./venv/bin/activate
+```
+
+Install dependencies, train the default agent, and evaluate its performance:
+
 ```bash
 pip install -r requirements.txt
+
+# Train a DQN agent on LunarLander
 python main.py --config configs/default.yaml
+
+# Evaluate the trained agent with rendering
+python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt
 ```
 
-This trains a DQN agent on CartPole-v1 with a live dashboard. Pass `--no-vis` for headless training.
+Pass `--no-vis` for headless training, `--no-render` for headless evaluation.
 
-## Real-Time Dashboard
+## How It Works
 
-The visualizer is a 2x2 matplotlib dashboard that runs in a background thread during training, updating every 100ms without blocking the training loop.
+A trained policy is produced from three independent inputs:
 
-| Panel               | What it shows                                                                                                         |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Reward per step** | Rolling line chart of step rewards — shows whether the agent is improving                                             |
-| **Epsilon**         | Exploration rate as it decays from 1.0 toward the minimum — shows the explore/exploit transition                      |
-| **Q-values**        | Bar chart of Q-values for each action at the current state; the greedy choice is highlighted red                      |
-| **Agent view**      | Adapts to state type: raw image frame for vision-based envs, or a bar chart of state dimensions for vector-based envs |
+| Input                  | Defines                                                                | Example                        |
+| ---------------------- | ---------------------------------------------------------------------- | ------------------------------ |
+| **MJCF XML**           | What the robot _is_ — geometry, mass, joints, actuators                | `models/mjcf/quadrotor.xml`    |
+| **MujocoEnv subclass** | What it _should learn_ — reward function, observations, termination    | `envs/quadrotor_hover.py`      |
+| **Config YAML**        | How to _train_ — hyperparameters, model architecture, epsilon schedule | `configs/quadrotor_hover.yaml` |
 
-The dashboard is thread-safe and runs as a daemon thread, so it shuts down automatically when training ends. On Windows, if the window doesn't render, you may need to set the matplotlib backend to `TkAgg`.
+The same robot can back different tasks (hover, land, track waypoints) by swapping the env subclass. The training loop never changes.
 
-## Evaluating a Trained Agent
+## Shipped Environment
 
-After training, use `eval.py` to load a checkpoint and watch the agent perform:
+The default config trains on **LunarLander-v3** — land a spacecraft between the flags using discrete thrust controls. Solved when average reward exceeds 200 over 50 episodes.
 
-```bash
-python eval.py --config configs/default.yaml --checkpoint checkpoints/CartPole-v1_best.pt
+For custom robots, subclass `MujocoEnv` and provide an MJCF XML file (see [Adding a New Robot](#adding-a-new-robot)).
+
+## Adding a New Robot
+
+1. Write an MJCF XML file describing the robot (`models/mjcf/your_robot.xml`)
+2. Subclass `MujocoEnv`
+3. Implement `_get_obs()`, `_get_reward()`, `_is_done()`, `_apply_action()`
+4. Create a config in `configs/`
+5. Train: `python main.py --config configs/your_robot.yaml`
+
+See [`CLAUDE.md`](CLAUDE.md) for full conventions and reward design principles.
+
+## Project Structure
+
 ```
+core/
+  agent.py        -- DQN agent (epsilon-greedy, replay, soft target updates)
+  memory.py       -- replay buffer
+  train.py        -- training loop (environment-agnostic)
+  visualizer.py   -- real-time reward dashboard
 
-This opens a rendering window and runs 10 episodes with greedy action selection (no exploration noise). Pass `--episodes N` to change the count, or `--no-render` for headless evaluation with reward stats only.
+envs/
+  base_env.py     -- abstract base class + GymEnv wrapper
+  mujoco_env.py   -- base class for MuJoCo-backed environments
 
-## The Pipeline
+models/
+  mlp.py          -- MLP for vector-based states
+  cnn.py          -- CNN for image-based states
+  mjcf/           -- MuJoCo robot definitions (MJCF XML, local dev)
 
-The harness is designed around a simulation-to-hardware pipeline:
+configs/
+  default.yaml    -- LunarLander-v3 (shipped)
 
+checkpoints/      -- saved model weights (local)
 ```
-Define env --> Train policy --> Evaluate in sim --> Export model --> Deploy to hardware
-```
-
-Today, the first three stages are supported. The trained `.pt` checkpoint is a set of neural network weights — the "brain" that turns sensor readings into actions. See [`PLAN.md`](PLAN.md) for the full roadmap toward model export and hardware deployment.
 
 ## Documentation
 
-- [`CLAUDE.md`](CLAUDE.md) — Architecture rules, project conventions, and how to extend the harness (add environments, choose models, design reward functions)
-- [`docs/README.md`](docs/README.md) — Detailed reference on DQN concepts, state representation, model selection, reward shaping, and sim-to-real considerations
-- [`PLAN.md`](PLAN.md) — Pipeline roadmap: from simulation to hardware deployment
+- [`CLAUDE.md`](CLAUDE.md): AI instructions on architecture rules, project conventions, and how to extend the harness
+- [`PLAN.md`](PLAN.md): A roadmap for MuJoCo integration, model export, hardware deployment, domain randomization
+- [`docs/README.md`](docs/README.md): Human readible documentation for DQN concepts, reward shaping, and sim-to-real considerations

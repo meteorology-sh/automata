@@ -1,3 +1,19 @@
 venv
 __pycache__
 .pytest_cache
+
+# Checkpoints are machine-specific
+checkpoints/*.pt
+
+# Custom environments — only base classes ship
+envs/*
+!envs/__init__.py
+!envs/base_env.py
+!envs/mujoco_env.py
+
+# Custom configs — only default ships
+configs/*
+!configs/default.yaml
+
+# MJCF robot models — local development
+models/mjcf/

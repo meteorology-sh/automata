@@ -1,4 +1,6 @@
+import os
 import numpy as np
+import pytest
 import torch
 import yaml
 
@@ -12,13 +14,35 @@ from models.mlp import MLP
 from models.cnn import CNN
 
 
-def _cartpole_config():
-    with open("configs/default.yaml") as f:
-        config = yaml.safe_load(f)
-    config["training"]["episodes"] = 1
-    config["training"]["solve_threshold"] = 99999
-    config["visualizer"]["enabled"] = False
-    return config
+def _minimal_config(env_name="CartPole-v1", state_size=4, num_actions=2):
+    """Build a minimal config dict inline — no file dependency."""
+    return {
+        "env": {
+            "name": env_name,
+            "image_size": 84,
+            "max_episode_steps": 500,
+        },
+        "model": {
+            "type": "mlp",
+            "hidden_size": 128,
+            "state_size": state_size,
+            "num_actions": num_actions,
+        },
+        "training": {
+            "episodes": 1,
+            "batch_size": 128,
+            "lr": 0.0001,
+            "gamma": 0.99,
+            "memory_size": 10000,
+            "train_every": 1,
+            "tau": 0.005,
+            "solve_window": 50,
+            "solve_threshold": 99999,
+        },
+        "epsilon": {"start": 0.9, "min": 0.01, "decay": 0.995},
+        "checkpoints": {"dir": "checkpoints/", "save_every": 100, "keep_best": True},
+        "visualizer": {"enabled": False},
+    }
 
 
 # --- ReplayBuffer ---
@@ -49,7 +73,7 @@ def test_replay_buffer_capacity():
 # --- DQNAgent ---
 
 def test_agent_select_action():
-    config = _cartpole_config()
+    config = _minimal_config()
     model = MLP(state_size=4, num_actions=2, hidden_size=32)
     agent = DQNAgent(model, config)
     state = torch.randn(1, 4)
@@ -58,7 +82,7 @@ def test_agent_select_action():
 
 
 def test_agent_remember_and_train():
-    config = _cartpole_config()
+    config = _minimal_config()
     config["training"]["batch_size"] = 4
     model = MLP(state_size=4, num_actions=2, hidden_size=32)
     agent = DQNAgent(model, config)
@@ -75,7 +99,7 @@ def test_agent_remember_and_train():
 
 
 def test_agent_epsilon_decay():
-    config = _cartpole_config()
+    config = _minimal_config()
     model = MLP(state_size=4, num_actions=2, hidden_size=32)
     agent = DQNAgent(model, config)
     initial = agent.epsilon
@@ -114,29 +138,24 @@ def test_cnn_output_shape():
 # --- build_env dispatch ---
 
 def test_build_env_default():
-    config = _cartpole_config()
+    config = _minimal_config()
     env = build_env(config)
     assert isinstance(env, GymEnv)
     env.close()
 
 
-def test_build_env_with_wrapper():
-    config = _cartpole_config()
-    # Point at the shaped acrobot subclass
-    config["env"]["name"] = "Acrobot-v1"
-    config["env"]["wrapper"] = "envs.shaped_acrobot.ShapedAcrobot"
-    config["model"]["state_size"] = 6
-    config["model"]["num_actions"] = 3
+def test_build_env_lunar_lander():
+    config = _minimal_config("LunarLander-v3", state_size=8, num_actions=4)
     env = build_env(config)
-    from envs.shaped_acrobot import ShapedAcrobot
-    assert isinstance(env, ShapedAcrobot)
+    state = env.reset()
+    assert state.shape == (8,)
     env.close()
 
 
 # --- GymEnv full episode ---
 
 def test_gym_env_full_episode():
-    config = _cartpole_config()
+    config = _minimal_config()
     env = GymEnv(config)
     state = env.reset()
     assert isinstance(state, np.ndarray)
@@ -158,7 +177,7 @@ def test_gym_env_full_episode():
 # --- Eval ---
 
 def test_eval_headless():
-    config = _cartpole_config()
+    config = _minimal_config()
     env = GymEnv(config)
     model = MLP(state_size=4, num_actions=2, hidden_size=128)
     rewards = evaluate(env, model, config, num_episodes=2)
@@ -167,7 +186,7 @@ def test_eval_headless():
 
 
 def test_gym_env_render_mode_from_config():
-    config = _cartpole_config()
+    config = _minimal_config()
     env = GymEnv(config)
     assert env.env.render_mode is None
     env.close()
@@ -175,4 +194,60 @@ def test_gym_env_render_mode_from_config():
     config["env"]["render_mode"] = "rgb_array"
     env = GymEnv(config)
     assert env.env.render_mode == "rgb_array"
+    env.close()
+
+
+# --- MuJoCo QuadrotorHover (skipped if local files aren't present) ---
+
+QUADROTOR_MJCF = "models/mjcf/quadrotor.xml"
+QUADROTOR_ENV = "envs/quadrotor_hover.py"
+has_quadrotor = os.path.exists(QUADROTOR_MJCF) and os.path.exists(QUADROTOR_ENV)
+
+
+@pytest.mark.skipif(not has_quadrotor, reason="quadrotor local dev files not present")
+def test_quadrotor_reset_state_shape():
+    from envs.quadrotor_hover import QuadrotorHover
+    config = _minimal_config("QuadrotorHover", state_size=12, num_actions=7)
+    config["env"]["mjcf"] = QUADROTOR_MJCF
+    config["env"]["n_substeps"] = 10
+    env = QuadrotorHover(config)
+    state = env.reset()
+    assert isinstance(state, np.ndarray)
+    assert state.shape == (12,)
+    env.close()
+
+
+@pytest.mark.skipif(not has_quadrotor, reason="quadrotor local dev files not present")
+def test_quadrotor_all_actions():
+    from envs.quadrotor_hover import QuadrotorHover
+    config = _minimal_config("QuadrotorHover", state_size=12, num_actions=7)
+    config["env"]["mjcf"] = QUADROTOR_MJCF
+    config["env"]["n_substeps"] = 10
+    env = QuadrotorHover(config)
+    for action in range(7):
+        env.reset()
+        next_state, reward, done, truncated, info = env.step(action)
+        assert next_state.shape == (12,)
+        assert -1.0 <= reward <= 1.0
+        assert isinstance(done, bool)
+        assert "height" in info
+    env.close()
+
+
+@pytest.mark.skipif(not has_quadrotor, reason="quadrotor local dev files not present")
+def test_quadrotor_full_episode():
+    from envs.quadrotor_hover import QuadrotorHover
+    config = _minimal_config("QuadrotorHover", state_size=12, num_actions=7)
+    config["env"]["mjcf"] = QUADROTOR_MJCF
+    config["env"]["n_substeps"] = 10
+    env = QuadrotorHover(config)
+    state = env.reset()
+    done = False
+    steps = 0
+    while not done:
+        next_state, reward, done, truncated, info = env.step(0)
+        done = done or truncated
+        steps += 1
+        state = next_state
+    assert steps > 0
     env.close()
