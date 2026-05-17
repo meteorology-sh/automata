@@ -1,142 +1,151 @@
-# PLAN — RL Harness: First Look to Working Demo
+# PLAN — From Simulation to Hardware
 
-## Feasibility Assessment
+## What Exists Today
 
-**Verdict: Feasible.** The harness is a complete, functional DQN training system with real-time visualization. Every core component is implemented and follows the architectural rules in CLAUDE.md. A working demo can be produced without writing any new infrastructure — only configuration and a thin environment wrapper.
+The harness is a working DQN training and evaluation system:
 
----
+- **Train** a DQN agent on any Gymnasium-compatible environment with a live dashboard (`python main.py`)
+- **Evaluate** a trained agent with visual rendering (`python eval.py --config ... --checkpoint ...`)
+- **Extend** with custom environments by subclassing `BaseEnv` and defining a reward function
+- **Configure** everything from YAML — hyperparameters, model type, environment, action labels
 
-## What Already Works
-
-| Component | File | Status |
-|---|---|---|
-| DQN agent (epsilon-greedy, replay, Bellman) | `core/agent.py` | Complete |
-| Replay buffer | `core/memory.py` | Complete |
-| Training loop (environment-agnostic) | `core/train.py` | Complete |
-| Real-time 4-panel dashboard | `core/visualizer.py` | Complete |
-| Abstract environment interface | `envs/base_env.py` | Complete |
-| Gymnasium wrapper (`GymEnv`) | `envs/base_env.py` | Complete |
-| MLP model (vector states) | `models/mlp.py` | Complete |
-| CNN model (image states) | `models/cnn.py` | Complete |
-| YAML config system | `configs/default.yaml` | Complete |
-| Entry point with CLI args | `main.py` | Complete |
-
-The default config targets **CartPole-v1** with an MLP, 1000 episodes, and a solve threshold of 475. Running `python main.py` should train an agent end-to-end with a live dashboard.
+Two environments are validated: CartPole-v1 and Acrobot-v1 (including a reward-shaped variant). See `CLAUDE.md` for architecture rules and extension guides.
 
 ---
 
-## What's Missing (for a demo)
+## The Pipeline
 
-Nothing structural. The gaps are operational:
+The goal is a complete path from "I have a robot" to "it does the thing I trained it to do."
 
-1. ~~**Dependencies not verified**~~ — Resolved. Dependencies install and train.py runs to completion.
-2. ~~**No smoke test**~~ — CartPole-v1 trained successfully through 700+ episodes with checkpoints saved.
-3. **No custom environment** — only the generic `GymEnv` wrapper exists. A domain-specific subclass would prove the harness is truly extensible.
-4. **No tests** — no pytest infrastructure. `requirements.txt` includes pytest but no test files exist yet.
+```
+Define env          Train policy         Evaluate            Export model         Deploy
+(simulator)    -->  (main.py)       -->  (eval.py)      -->  (.pt -> portable)  -->  (hardware)
+    |                                                                                    |
+    |                                                                                    |
+    +------- Observe sim-to-real gap, tune simulator, retrain <--------------------------+
+```
 
----
+### Stage 1: Define the environment (supported)
 
-## Plan
+Subclass `BaseEnv`. Map your robot's sensors to a state vector, its actuators to discrete actions, and define a reward function inside `step()`. For training, this environment talks to a *simulator* — not the real robot.
 
-### Phase 1 — Validate the foundation ✓
+For robotics, the simulator is the critical piece. Options:
+- **PyBullet** — free, good for arms and legged robots
+- **MuJoCo** (via Gymnasium) — industry standard for contact-rich manipulation
+- **Isaac Sim** — GPU-accelerated, massive parallelism, NVIDIA hardware
 
-> Goal: Confirm the harness runs, trains, and visualizes without errors.
+The simulator must produce the same state/action interface your real robot will. If the real robot has a 6-axis IMU and 4 motor channels, the simulator must output 6 floats and accept 4 discrete actions.
 
-- [x] **1.1** Install dependencies from `requirements.txt` into a clean venv. Fix any version conflicts.
-- [x] **1.2** Run `python main.py --config configs/default.yaml` on CartPole-v1. Confirm:
-  - Training loop starts and episodes accumulate.
-  - Visualizer window opens with all 4 panels updating.
-  - Epsilon decays on schedule.
-  - Checkpoints are written to `checkpoints/`.
-- [x] **1.3** Let it run to convergence (or at least 200 episodes). Verify:
-  - Reward trend climbs in the dashboard.
-  - Best checkpoint is saved separately from periodic checkpoints.
-  - Training stops early if solve threshold (475) is reached.
-- [x] **1.4** Document any bugs or friction found during the run.
+### Stage 2: Train a policy (supported)
 
-**Phase 1 findings:**
+```bash
+python main.py --config configs/your_robot.yaml
+```
 
-- Training ran through 700+ episodes. Periodic checkpoints saved every 100 episodes (`CartPole-v1_0.pt` through `CartPole-v1_700.pt`). Best checkpoint tracked separately as `CartPole-v1_best.pt`.
-- **Bug found:** `core/train.py` lines 89 and 95 build checkpoint paths via string concatenation (`f"{checkpoint_dir}{env_name}_{episode}.pt"`) instead of `os.path.join()`. This works only because `default.yaml` sets `dir: checkpoints/` with a trailing slash. A config without the trailing slash would write files to the wrong location. Needs fix in Phase 2.
+The training loop runs episodes in the simulator, collecting experience and updating the neural network via DQN. The output is a `.pt` checkpoint file containing the trained weights.
 
-### Phase 2 — Fix what's broken ✓
+### Stage 3: Evaluate in simulation (supported)
 
-> Goal: Patch anything Phase 1 surfaces so the harness is reliable.
+```bash
+python eval.py --config configs/your_robot.yaml --checkpoint checkpoints/your_robot_best.pt
+```
 
-- [x] **2.1** Fix checkpoint path construction in `core/train.py` — replaced string concatenation with `os.path.join()` on both checkpoint save paths.
-- [x] **2.2** Verify visualizer threading on Windows. Default backend is `tkagg` — correct for Windows. No explicit backend override needed; visualizer ran successfully in Phase 1.
-- [x] **2.3** Confirm `--no-vis` flag works for headless training — ran 3-episode headless session, no errors. Also fixed a `UserWarning` in `core/agent.py` where `torch.tensor()` was called on a list of numpy arrays instead of a pre-stacked `np.array()`.
-- [x] **2.4** Confirm checkpoint filenames follow the `{env_name}_{episode}.pt` pattern — verified after the `os.path.join()` fix. Headless run produced correct paths.
+Watch the agent perform in the simulator with no exploration noise. This is where you verify the policy actually does what you want before putting it on hardware.
 
-### Phase 3 — Prove extensibility with a second environment ✓
+### Stage 4: Export the model (not yet built)
 
-> Goal: Demonstrate the harness is truly generic by adding a non-trivial environment.
+The `.pt` file is a Python-specific format — a dictionary mapping layer names (`net.0.weight`, `net.0.bias`, etc.) to PyTorch tensors. To run on hardware, it needs to be converted to something the target device can execute.
 
-- [x] **3.1** Target: **Acrobot-v1** — 6-dimensional vector state, 3 discrete actions. (Original plan targeted LunarLander-v3, but Box2D and pygame don't build on Python 3.14. Acrobot is included in base Gymnasium and still exercises different `state_size`/`num_actions`.)
-- [x] **3.2** Created `configs/acrobot.yaml` with tuned hyperparameters (1500 episodes, batch 64, lr 0.0005, epsilon decay 0.997).
-- [x] **3.3** Ran training headless — training loop and checkpoint saving worked with zero code changes. Checkpoints saved as `Acrobot-v1_0.pt`, `Acrobot-v1_best.pt`.
-- [x] **3.4** Created `envs/shaped_acrobot.py` — a `ShapedAcrobot` subclass of `BaseEnv` with a dense height-based reward bonus. Added config-driven env dispatch to `main.py` via an `env.wrapper` key (e.g., `wrapper: "envs.shaped_acrobot.ShapedAcrobot"`). Existing configs without the key still use `GymEnv`. Tested all three paths (CartPole/GymEnv, Acrobot/GymEnv, Acrobot/ShapedAcrobot) — all work.
+Options by target:
+- **Linux SBC (Raspberry Pi, Jetson)** — TorchScript (`torch.jit.trace`) or ONNX. Both run without Python if needed.
+- **Microcontroller (Arduino, STM32)** — Extract raw weight arrays and write a minimal forward pass in C. The MLP is just matrix multiplies and ReLU.
+- **ROS2 node** — TorchScript or ONNX loaded in a C++ or Python node.
 
-**Phase 3 findings:**
+An `export.py` script would handle this: load a checkpoint + config, trace the model, save as TorchScript/ONNX.
 
-- The env dispatch in `main.py` (`build_env()`) uses `importlib` to load a class from the `env.wrapper` config key. This keeps the training loop environment-agnostic.
-- ShapedAcrobot rewards (~-458) differ from vanilla Acrobot (-500) even early on, confirming the height bonus is active.
-- No new pip dependencies required — Acrobot ships with base Gymnasium.
+### Stage 5: Deploy to hardware (not yet built)
 
-### Phase 4 — Polish the demo
+The deployment loop is simpler than training — no replay buffer, no optimizer, no epsilon. It's a tight sensor-action cycle:
 
-> Goal: Make the result presentable and reproducible.
+```
+while running:
+    state = read_sensors()         # IMU, cameras, encoders
+    action = model.forward(state)  # neural network inference
+    send_command(action)           # motor PWM, servo angles
+    wait(control_period)           # e.g. 50ms for 20Hz control
+```
 
-- [ ] **4.1** Add a basic pytest smoke test (`tests/test_smoke.py`):
-  - Instantiate `ReplayBuffer`, push and sample transitions.
-  - Instantiate `DQNAgent` with a small MLP, call `select_action` and `train`.
-  - Instantiate `GymEnv("CartPole-v1")`, run 1 episode to completion, assert no crashes.
-  - Verify `state_to_tensor` produces correct shapes for both MLP and CNN paths.
-  - Test `build_env()` with and without a `wrapper` key.
-- [ ] **4.2** Clean up any dead code or unused config keys found during Phases 1-3.
-- [ ] **4.3** Add action label support to the visualizer. Environments should optionally provide action names (e.g., `["Left", "Right"]` for CartPole, `["Torque -1", "None", "Torque +1"]` for Acrobot) so the Q-value bar chart displays readable labels instead of `Action 0`, `Action 1`.
-- [ ] **4.4** Commit a working state with all configs and fixes.
+A `deploy/infer.py` template would provide this loop with pluggable sensor and actuator interfaces.
 
----
+### Stage 6: Close the sim-to-real gap (not yet built)
 
-## Risks
+A policy trained in simulation will not work perfectly on real hardware. The simulator is always an approximation. Strategies:
 
-| Risk | Likelihood | Mitigation |
-|---|---|---|
-| ~~Matplotlib backend issues on Windows~~ | ~~Medium~~ | Resolved — `tkagg` backend works, no override needed |
-| ~~CartPole doesn't converge with default hyperparams~~ | ~~Low~~ | Resolved — CartPole trained successfully |
-| ~~Box2D dependency doesn't install cleanly on Windows~~ | ~~Medium~~ | Resolved — pivoted to Acrobot-v1, no extra deps |
-| CNN path untested (no image-based env in demo) | Low | Defer to future phase; MLP path is sufficient for demo |
+- **Domain randomization** — vary physics parameters (friction, mass, latency) during training so the policy is robust to the real values
+- **Noise injection** — add Gaussian noise to sensor readings during training to match real sensor noise
+- **System identification** — measure real hardware dynamics and tune the simulator to match
+- **Fine-tuning on hardware** — run a few real-world episodes to adjust the policy (requires safe exploration)
 
 ---
 
-## Success Criteria
+## Roadmap
 
-The demo is "working" when:
+### Phase 5 — Model export
 
-1. ~~`python main.py` trains a DQN agent on CartPole-v1 and shows a live dashboard.~~ ✓
-2. ~~The agent's reward visibly improves over training.~~ ✓
-3. ~~A second environment trains with only a config change.~~ ✓ (Acrobot-v1)
-4. ~~Checkpoints are saved correctly.~~ ✓
-5. The whole thing is reproducible from a clean `pip install -r requirements.txt`.
+> Goal: Convert trained checkpoints to portable formats for deployment.
+
+- [ ] **5.1** Create `export.py` — load config + checkpoint, trace model with `torch.jit.trace`, save as TorchScript (`.ts`).
+- [ ] **5.2** Add ONNX export path (`torch.onnx.export`) for non-PyTorch runtimes.
+- [ ] **5.3** Add raw weight extraction for microcontroller targets — dump weights as C arrays or flat binary.
+- [ ] **5.4** Test that exported models produce the same outputs as the original `.pt` for a set of test inputs.
+
+### Phase 6 — Hardware inference template
+
+> Goal: Provide a starting point for running a trained policy on real hardware.
+
+- [ ] **6.1** Create `deploy/infer.py` — template inference loop with pluggable `read_sensors()` and `send_command()` functions.
+- [ ] **6.2** Add a serial (UART) sensor/actuator backend as a reference implementation.
+- [ ] **6.3** Add a ROS2 backend (publish actions to a topic, subscribe to sensor state).
+- [ ] **6.4** Document control frequency considerations — the inference loop must run faster than the environment dynamics.
+
+### Phase 7 — Domain randomization
+
+> Goal: Make policies robust to the sim-to-real gap.
+
+- [ ] **7.1** Add noise injection config to `BaseEnv` — Gaussian noise on state observations, configurable per-dimension.
+- [ ] **7.2** Add physics randomization hooks — environments can vary parameters (mass, friction, latency) each episode.
+- [ ] **7.3** Test that a domain-randomized CartPole policy is more robust to perturbation than a standard one.
+
+### Phase 8 — Advanced algorithms
+
+> Goal: Move beyond vanilla DQN for harder problems.
+
+- [ ] **8.1** Target network (separate slowly-updated network for computing target Q-values — reduces training instability).
+- [ ] **8.2** Double DQN (decouple action selection from value estimation to reduce overestimation bias).
+- [ ] **8.3** Prioritized experience replay (sample important transitions more often).
+- [ ] **8.4** Dueling DQN (separate state-value and advantage streams).
 
 ---
 
-## Current Status (2026-05-16)
+## What the .pt File Actually Is
 
-**Phases 1-3 complete. Phase 4 is next.**
+When training saves `checkpoints/CartPole-v1_best.pt`, it writes a dictionary like:
 
-The harness is validated, patched, and proven generic. Two environments train successfully (CartPole, Acrobot) with zero training-loop changes. A custom `BaseEnv` subclass (`ShapedAcrobot`) demonstrates that reward shaping lives in the environment. Config-driven env dispatch added to `main.py`. Next step is polish: smoke tests, action labels, cleanup.
+```
+{
+  "net.0.weight": tensor of shape (128, 4),    # first layer: 4 inputs -> 128 hidden
+  "net.0.bias":   tensor of shape (128,),
+  "net.2.weight": tensor of shape (128, 128),  # second layer
+  "net.2.bias":   tensor of shape (128,),
+  "net.4.weight": tensor of shape (2, 128),    # output layer: 128 hidden -> 2 actions
+  "net.4.bias":   tensor of shape (2,),
+}
+```
 
----
+This is *what the agent learned* — the numeric weights that turn a state vector into Q-values. It is not a runnable program. To use it, you must:
 
-## What Comes After the Demo
+1. Reconstruct the same model architecture (from the config)
+2. Load the weights into it (`model.load_state_dict(...)`)
+3. Pass a state through it (`model(state_tensor).argmax()` gives the best action)
 
-These are out of scope for this plan but worth noting:
-
-- **Custom environments** — subclass `BaseEnv` for a domain-specific simulator (robotics, game, control system).
-- **Image-based environment** — test the CNN path with an Atari or pixel-observation env.
-- **Advanced algorithms** — Double DQN, Dueling DQN, prioritized experience replay.
-- **Offline analysis** — TensorBoard or Weights & Biases integration alongside the live visualizer.
-- **Hyperparameter sweeps** — Optuna or grid search over config values.
-- **Test coverage** — full pytest suite for agent, memory, models, and training loop.
+This is what `eval.py` does. An export step (Phase 5) would convert this dictionary into a self-contained format that doesn't need Python or the config to run.

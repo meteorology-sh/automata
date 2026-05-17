@@ -39,7 +39,8 @@ models/
 configs/
   default.yaml    ← all hyperparameters live here
 
-main.py           ← point of entry
+main.py           ← training entry point
+eval.py           ← evaluate a trained checkpoint with rendering
 ```
 
 ---

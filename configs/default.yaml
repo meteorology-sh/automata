@@ -17,7 +17,8 @@ training:
   memory_size: 10000 # replay buffer capacity
   train_every: 1 # gradient update every N environment steps
   tau: 0.005 # soft update rate for target network (blended every training step)
-  solve_threshold: 475 # avg reward over last 100 episodes to consider solved
+  solve_window: 50 # rolling average window for solve condition
+  solve_threshold: 475 # avg reward over last solve_window episodes to consider solved
 epsilon:
   start: 0.9
   min: 0.01
@@ -28,4 +29,3 @@ checkpoints:
   keep_best: true # always keep the highest reward checkpoint
 visualizer:
   enabled: true
-  action_labels: ["Left", "Right"]
