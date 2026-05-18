@@ -17,19 +17,31 @@ python3.12 -m venv venv
 source ./venv/bin/activate
 ```
 
-Install dependencies, train the default agent, and evaluate its performance:
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
-
-# Train a DQN agent on LunarLander
-python main.py --config configs/default.yaml
-
-# Evaluate the trained agent with rendering
-python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt
 ```
 
-Pass `--no-vis` for headless training, `--no-render` for headless evaluation.
+### Training
+
+```bash
+# Train headless
+python main.py --config configs/default.yaml
+
+# Train with the real-time reward dashboard
+python main.py --config configs/default.yaml --vis
+```
+
+### Evaluation
+
+```bash
+# Evaluate with 3D rendering
+python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt
+
+# Evaluate headless
+python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt --no-render
+```
 
 ## How It Works
 
@@ -79,6 +91,8 @@ models/
 
 configs/
   default.yaml    -- LunarLander-v3 (shipped)
+
+tests/            -- smoke tests (framework) + per-environment test files
 
 checkpoints/      -- saved model weights (local)
 ```

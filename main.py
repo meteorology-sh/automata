@@ -18,8 +18,8 @@ def build_env(config: dict):
 def main():
     parser = argparse.ArgumentParser(description="RL Harness")
     parser.add_argument("--config", type=str, default="configs/default.yaml")
-    parser.add_argument("--no-vis", action="store_true",
-                        help="Disable visualizer")
+    parser.add_argument("--vis", action="store_true",
+                        help="Enable real-time reward dashboard")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -27,7 +27,7 @@ def main():
     env = build_env(config)
 
     visualizer = None
-    if not args.no_vis and config["visualizer"]["enabled"]:
+    if args.vis and config["visualizer"]["enabled"]:
         solve_threshold = config["training"]["solve_threshold"]
         solve_window = config["training"].get("solve_window", 50)
         visualizer = Visualizer(solve_threshold=solve_threshold, solve_window=solve_window)
