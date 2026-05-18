@@ -24,23 +24,50 @@ These must be followed at all times:
 
 ```
 core/
-  agent.py        ← epsilon-greedy action selection
-  memory.py       ← replay buffer
-  train.py        ← training loop (environment-agnostic)
-  visualizer.py   ← real-time dashboard
+  agent.py            ← DQN agent (epsilon-greedy, replay, soft target updates)
+  memory.py           ← replay buffer
+  train.py            ← training loop (environment-agnostic)
+  visualizer.py       ← real-time reward dashboard
 
 envs/
-  base_env.py     ← abstract base class, all envs subclass this
+  base_env.py         ← abstract base class + GymEnv wrapper
+  mujoco_env.py       ← base class for MuJoCo-backed environments
+  quadrotor_hover.py  ← hover at target altitude
+  quadrotor_follow.py ← follow a moving target
 
 models/
-  cnn.py          ← vision model for image-based states
-  mlp.py          ← MLP for vector-based states
+  mlp.py              ← MLP for vector-based states
+  cnn.py              ← CNN for image-based states
+  mjcf/               ← MuJoCo robot definitions (MJCF XML)
+    quadrotor.xml
 
 configs/
-  default.yaml    ← all hyperparameters live here
+  default.yaml            ← LunarLander-v3 (shipped default)
+  quadrotor_hover.yaml
+  quadrotor_follow.yaml
 
-main.py           ← training entry point
-eval.py           ← evaluate a trained checkpoint with rendering
+tests/
+  test_smoke.py               ← framework tests (agent, buffer, models)
+  test_quadrotor_hover.py     ← hover env tests
+  test_quadrotor_follow.py    ← follow env tests
+
+main.py               ← training entry point
+eval.py               ← evaluate a trained checkpoint
+checkpoints/           ← saved model weights (local)
+```
+
+---
+
+## CLI
+
+```bash
+# Training (headless by default)
+python main.py --config configs/default.yaml
+python main.py --config configs/default.yaml --vis    # enable reward dashboard
+
+# Evaluation (renders by default)
+python eval.py --config configs/quadrotor_hover.yaml --checkpoint checkpoints/QuadrotorHover_best.pt
+python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt --no-render
 ```
 
 ---
@@ -49,26 +76,39 @@ eval.py           ← evaluate a trained checkpoint with rendering
 
 ### Adding a new environment
 
-1. Create `envs/your_env.py`
-2. Subclass `BaseEnv`
-3. Implement `reset()`, `step()`, and `get_state()`
-4. Define the reward function inside `step()`
-5. Add a config entry in `configs/`
+For Gymnasium environments, use `GymEnv` wrapper. For custom physics, subclass `MujocoEnv`:
+
+1. Create `envs/your_env.py`, subclass `MujocoEnv` (or `BaseEnv` for non-MuJoCo)
+2. Implement `_get_obs()`, `_get_reward()`, `_is_done()`, `_apply_action()`
+3. Override `_reset_state()` for initial randomization
+4. Override `_configure_camera()` to set the viewer viewport
+5. Add a config in `configs/your_env.yaml` with `wrapper: "envs.your_env.YourEnv"`
+6. Create `tests/test_your_env.py` (never add env tests to `test_smoke.py`)
 
 ```python
-from envs.base_env import BaseEnv
+from envs.mujoco_env import MujocoEnv
 
-class YourEnv(BaseEnv):
-    def reset(self):
-        # return initial state
+class YourEnv(MujocoEnv):
+    def _apply_action(self, action: int):
+        # map discrete action to self.data.ctrl
 
-    def step(self, action):
-        # apply action
-        # compute reward here
-        # return (next_state, reward, done, truncated, info)
+    def _get_obs(self) -> np.ndarray:
+        # return observation vector
 
-    def get_state(self):
-        # return current state as numpy array or image
+    def _get_reward(self) -> float:
+        if self._is_crashed():
+            return -1.0  # crash penalty is mandatory
+        # compute reward components
+        return float(np.clip(reward, -1.0, 1.0))
+
+    def _is_done(self) -> bool:
+        return self._is_crashed()
+
+    def _reset_state(self):
+        # randomize initial qpos/qvel
+
+    def _configure_camera(self):
+        # set cam.lookat, cam.distance, cam.elevation from env params
 ```
 
 ### Choosing a model
@@ -79,8 +119,9 @@ class YourEnv(BaseEnv):
 
 ### Reward function design
 
-Design rewards inside `step()`. Follow these principles:
+Design rewards inside `_get_reward()`. Follow these principles:
 
+- Always return -1.0 on crash — without this, the replay buffer fills with indistinguishable low-positive crash transitions and the agent never learns stability
 - Reward the actual goal, not a proxy for it
 - No single reward component should dominate
 - Think adversarially: how would an optimizer game this function?
@@ -89,24 +130,29 @@ Design rewards inside `step()`. Follow these principles:
 
 ### Hyperparameters
 
-All hyperparameters are read from `configs/default.yaml`:
+All hyperparameters are read from config YAML files. Canonical baseline:
 
 ```yaml
-epsilon_start: 0.9
-epsilon_min: 0.01
-epsilon_decay: 0.995
-gamma: 0.99
-batch_size: 128
-lr: 0.0001
-memory_size: 10000
-train_every: 1
-tau: 0.005
-solve_window: 50
-episodes: 1000
-image_size: 224
+epsilon:
+  start: 0.9
+  min: 0.01
+  decay: 0.995
+training:
+  gamma: 0.99
+  batch_size: 128
+  lr: 0.0001
+  memory_size: 10000    # scale with max_episode_steps
+  train_every: 1
+  tau: 0.005
+  solve_window: 50
+  solve_threshold: 200  # set 10-15% below expected peak
 ```
 
-Override per-project by creating `configs/your_env.yaml`. See `SKILLS.md` for lessons on how these values interact.
+Override per-environment by creating `configs/your_env.yaml`. Key tuning rules:
+- Scale `memory_size` with `max_episode_steps` — long episodes need larger buffers to resist the death spiral (short crash episodes overwrite good data)
+- Set `solve_threshold` conservatively below expected peak — if unreachable, training continues past the cliff
+- Epsilon should reach `epsilon_min` at ~80% of the episode budget
+- See `.claude/rules/hyperparameters.md` for detailed interaction rules
 
 ### Stopping criteria
 
@@ -140,6 +186,18 @@ for each episode:
     decay epsilon
     checkpoint if best reward
 ```
+
+---
+
+## Maintenance
+
+When adding new files, environments, configs, or concepts to the project, update this file to reflect them. Specifically:
+- New files or directories → update the Architecture tree
+- New environments → add to the tree and ensure the Skills section covers any new patterns
+- New CLI flags → update the CLI section
+- New rules or lessons learned → add to `.claude/rules/` and summarize here if they affect how environments are built or trained
+
+CLAUDE.md is loaded at the start of every session. If it is stale, the assistant wastes tokens re-exploring the codebase. Keep it current.
 
 ---
 
