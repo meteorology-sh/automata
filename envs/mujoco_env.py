@@ -37,6 +37,7 @@ class MujocoEnv(BaseEnv):
         mujoco.mj_forward(self.model, self.data)
         if self.render_mode == "human" and self._viewer is None:
             self._viewer = mujoco.viewer.launch_passive(self.model, self.data)
+            self._configure_camera()
         return self._get_obs()
 
     def step(self, action: int) -> tuple:
@@ -57,6 +58,16 @@ class MujocoEnv(BaseEnv):
 
     def get_state(self) -> np.ndarray:
         return self._get_obs()
+
+    def _configure_camera(self):
+        """Set initial camera to frame the full scene. Override for custom views."""
+        if self._viewer is None:
+            return
+        cam = self._viewer.cam
+        cam.lookat[:] = self.model.stat.center
+        cam.distance = self.model.stat.extent * 1.5
+        cam.elevation = -20
+        cam.azimuth = 135
 
     def _reset_state(self):
         """Override to set initial qpos/qvel with randomization."""
