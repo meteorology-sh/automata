@@ -17,3 +17,7 @@ configs/*
 
 # MJCF robot models — local development
 models/mjcf/
+
+# Tests
+tests/*
+!tests/test_smoke.py
