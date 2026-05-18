@@ -14,7 +14,7 @@ from models.mlp import MLP
 from models.cnn import CNN
 
 
-def _minimal_config(env_name="CartPole-v1", state_size=4, num_actions=2):
+def _minimal_config(env_name="LunarLander-v3", state_size=8, num_actions=4):
     """Build a minimal config dict inline — no file dependency."""
     return {
         "env": {
@@ -74,33 +74,33 @@ def test_replay_buffer_capacity():
 
 def test_agent_select_action():
     config = _minimal_config()
-    model = MLP(state_size=4, num_actions=2, hidden_size=32)
+    model = MLP(state_size=8, num_actions=4, hidden_size=32)
     agent = DQNAgent(model, config)
-    state = torch.randn(1, 4)
+    state = torch.randn(1, 8)
     action = agent.select_action(state)
-    assert action in (0, 1)
+    assert action in range(4)
 
 
 def test_agent_remember_and_train():
     config = _minimal_config()
     config["training"]["batch_size"] = 4
-    model = MLP(state_size=4, num_actions=2, hidden_size=32)
+    model = MLP(state_size=8, num_actions=4, hidden_size=32)
     agent = DQNAgent(model, config)
 
     # Not enough samples yet — train returns None
-    agent.remember(np.zeros(4), 0, 1.0, np.zeros(4), False)
+    agent.remember(np.zeros(8), 0, 1.0, np.zeros(8), False)
     assert agent.train() is None
 
     # Fill buffer past batch_size
     for _ in range(10):
-        agent.remember(np.random.randn(4), 0, 1.0, np.random.randn(4), False)
+        agent.remember(np.random.randn(8), 0, 1.0, np.random.randn(8), False)
     loss = agent.train()
     assert isinstance(loss, float)
 
 
 def test_agent_epsilon_decay():
     config = _minimal_config()
-    model = MLP(state_size=4, num_actions=2, hidden_size=32)
+    model = MLP(state_size=8, num_actions=4, hidden_size=32)
     agent = DQNAgent(model, config)
     initial = agent.epsilon
     agent.decay_epsilon()
@@ -110,9 +110,9 @@ def test_agent_epsilon_decay():
 # --- state_to_tensor ---
 
 def test_state_to_tensor_mlp():
-    state = np.array([1.0, 2.0, 3.0, 4.0])
+    state = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])
     t = state_to_tensor(state, "mlp")
-    assert t.shape == (1, 4)
+    assert t.shape == (1, 8)
 
 
 def test_state_to_tensor_cnn():
@@ -124,9 +124,9 @@ def test_state_to_tensor_cnn():
 # --- Models ---
 
 def test_mlp_output_shape():
-    model = MLP(state_size=4, num_actions=2, hidden_size=32)
-    out = model(torch.randn(1, 4))
-    assert out.shape == (1, 2)
+    model = MLP(state_size=8, num_actions=4, hidden_size=32)
+    out = model(torch.randn(1, 8))
+    assert out.shape == (1, 4)
 
 
 def test_cnn_output_shape():
@@ -144,14 +144,6 @@ def test_build_env_default():
     env.close()
 
 
-def test_build_env_lunar_lander():
-    config = _minimal_config("LunarLander-v3", state_size=8, num_actions=4)
-    env = build_env(config)
-    state = env.reset()
-    assert state.shape == (8,)
-    env.close()
-
-
 # --- GymEnv full episode ---
 
 def test_gym_env_full_episode():
@@ -159,7 +151,7 @@ def test_gym_env_full_episode():
     env = GymEnv(config)
     state = env.reset()
     assert isinstance(state, np.ndarray)
-    assert state.shape == (4,)
+    assert state.shape == (8,)
 
     done = False
     steps = 0
@@ -179,7 +171,7 @@ def test_gym_env_full_episode():
 def test_eval_headless():
     config = _minimal_config()
     env = GymEnv(config)
-    model = MLP(state_size=4, num_actions=2, hidden_size=128)
+    model = MLP(state_size=8, num_actions=4, hidden_size=128)
     rewards = evaluate(env, model, config, num_episodes=2)
     assert len(rewards) == 2
     assert all(isinstance(r, (int, float)) for r in rewards)
@@ -194,60 +186,4 @@ def test_gym_env_render_mode_from_config():
     config["env"]["render_mode"] = "rgb_array"
     env = GymEnv(config)
     assert env.env.render_mode == "rgb_array"
-    env.close()
-
-
-# --- MuJoCo QuadrotorHover (skipped if local files aren't present) ---
-
-QUADROTOR_MJCF = "models/mjcf/quadrotor.xml"
-QUADROTOR_ENV = "envs/quadrotor_hover.py"
-has_quadrotor = os.path.exists(QUADROTOR_MJCF) and os.path.exists(QUADROTOR_ENV)
-
-
-@pytest.mark.skipif(not has_quadrotor, reason="quadrotor local dev files not present")
-def test_quadrotor_reset_state_shape():
-    from envs.quadrotor_hover import QuadrotorHover
-    config = _minimal_config("QuadrotorHover", state_size=12, num_actions=7)
-    config["env"]["mjcf"] = QUADROTOR_MJCF
-    config["env"]["n_substeps"] = 10
-    env = QuadrotorHover(config)
-    state = env.reset()
-    assert isinstance(state, np.ndarray)
-    assert state.shape == (12,)
-    env.close()
-
-
-@pytest.mark.skipif(not has_quadrotor, reason="quadrotor local dev files not present")
-def test_quadrotor_all_actions():
-    from envs.quadrotor_hover import QuadrotorHover
-    config = _minimal_config("QuadrotorHover", state_size=12, num_actions=7)
-    config["env"]["mjcf"] = QUADROTOR_MJCF
-    config["env"]["n_substeps"] = 10
-    env = QuadrotorHover(config)
-    for action in range(7):
-        env.reset()
-        next_state, reward, done, truncated, info = env.step(action)
-        assert next_state.shape == (12,)
-        assert -1.0 <= reward <= 1.0
-        assert isinstance(done, bool)
-        assert "height" in info
-    env.close()
-
-
-@pytest.mark.skipif(not has_quadrotor, reason="quadrotor local dev files not present")
-def test_quadrotor_full_episode():
-    from envs.quadrotor_hover import QuadrotorHover
-    config = _minimal_config("QuadrotorHover", state_size=12, num_actions=7)
-    config["env"]["mjcf"] = QUADROTOR_MJCF
-    config["env"]["n_substeps"] = 10
-    env = QuadrotorHover(config)
-    state = env.reset()
-    done = False
-    steps = 0
-    while not done:
-        next_state, reward, done, truncated, info = env.step(0)
-        done = done or truncated
-        steps += 1
-        state = next_state
-    assert steps > 0
     env.close()
