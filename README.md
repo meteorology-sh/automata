@@ -14,6 +14,9 @@ Then, in the root directory, instantiate a virtual environment:
 
 ```bash
 python3.12 -m venv venv
+```
+
+```bash
 source ./venv/bin/activate
 ```
 
@@ -28,7 +31,9 @@ pip install -r requirements.txt
 ```bash
 # Train headless
 python main.py --config configs/default.yaml
+```
 
+```bash
 # Train with the real-time reward dashboard
 python main.py --config configs/default.yaml --vis
 ```
@@ -38,7 +43,9 @@ python main.py --config configs/default.yaml --vis
 ```bash
 # Evaluate with 3D rendering
 python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt
+```
 
+```bash
 # Evaluate headless
 python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt --no-render
 ```
