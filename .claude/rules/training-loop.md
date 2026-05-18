@@ -12,5 +12,8 @@ The visualizer must never add per-step computation to the training loop. No forw
 ## Chart must match the solve condition
 The rolling average displayed on the chart must use the same window size as the solve condition (`solve_window` from config). If the chart shows a 20-episode average but the solve condition uses 50, the user sees the average cross the threshold long before training actually stops. What the user sees must directly predict when training will stop.
 
+## Visualization is opt-in
+Training runs headless by default. Pass `--vis` to enable the real-time reward dashboard. Evaluation renders by default (`render_mode="human"`); pass `--no-render` for headless eval.
+
 ## Path construction
 Always use `os.path.join()` for file paths. Never concatenate directory and filename strings — `f"{dir}{name}.pt"` breaks when the directory doesn't have a trailing slash.

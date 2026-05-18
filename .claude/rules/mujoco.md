@@ -18,3 +18,6 @@ hover_thrust = model.body_mass[body_id] * abs(model.opt.gravity[2]) / 4.0
 
 ## Viewer lifecycle
 Create the viewer lazily on first `reset()` when `render_mode="human"`. Call `viewer.sync()` after each `step()`. Close in `close()`. Never create a viewer during training (render_mode is None).
+
+## Camera configuration
+Override `_configure_camera()` in each MujocoEnv subclass to set the initial viewport from the environment's parameters (target height, trajectory radius, operating bounds, etc.). The base class default uses `model.stat.center` and `model.stat.extent` which are dominated by the ground plane and rarely frame the action well. Compute `cam.lookat`, `cam.distance`, and `cam.elevation` dynamically so the viewport scales with config changes.
