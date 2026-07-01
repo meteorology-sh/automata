@@ -16,7 +16,7 @@ configs/*
 !configs/default.yaml
 
 # MJCF robot models — local development
-models/mjcf/
+models/mjcf/*.xml
 
 # Tests
 tests/*
