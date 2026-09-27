@@ -60,7 +60,7 @@ def test_replay_buffer_sample():
         buf.append([i], 0, 1.0, [i + 1], False)
     batch = buf.sample(5)
     assert len(batch) == 5
-    assert all(len(t) == 5 for t in batch)
+    assert all(len(t) == 6 for t in batch)   # (s, a, r, s2, done, bootstrap discount)
 
 
 def test_replay_buffer_capacity():
@@ -186,4 +186,27 @@ def test_gym_env_render_mode_from_config():
     config["env"]["render_mode"] = "rgb_array"
     env = GymEnv(config)
     assert env.env.render_mode == "rgb_array"
+    env.close()
+
+
+# --- Reproducible episode seeding ---
+
+def test_env_seed_makes_episodes_repeatable():
+    config = _minimal_config()
+    config["env"]["seed"] = 7000
+    a = GymEnv(config)
+    first_a, second_a = a.reset(), a.reset()
+    a.close()
+    b = GymEnv(config)
+    first_b, second_b = b.reset(), b.reset()
+    b.close()
+    assert np.allclose(first_a, first_b) and np.allclose(second_a, second_b)
+    assert not np.allclose(first_a, second_a)   # each episode differs, the sequence repeats
+
+
+def test_env_without_seed_is_unseeded():
+    config = _minimal_config()
+    env = GymEnv(config)
+    assert env.seed is None
+    env.reset()
     env.close()

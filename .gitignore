@@ -21,3 +21,4 @@ models/mjcf/*.xml
 # Tests
 tests/*
 !tests/test_smoke.py
+!tests/test_agent.py

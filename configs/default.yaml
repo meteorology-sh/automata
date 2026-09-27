@@ -20,6 +20,9 @@ training:
   memory_size: 10000
   train_every: 1
   tau: 0.005
+  double_dqn: true         # online net picks the next action, target net scores it
+  n_step: 1                # 1 = plain 1-step DQN; raise when the payoff is far from the act
+  explore_hold: 1          # 1 = per-step epsilon; raise for coherent exploratory manoeuvres
   solve_window: 50
   solve_threshold: 200
 epsilon:
@@ -30,5 +33,6 @@ checkpoints:
   dir: "checkpoints/"
   save_every: 100
   keep_best: true
+  best_metric: "reward"    # "reward" | "success" (needs info["is_success"]) | any numeric info key
 visualizer:
   enabled: true

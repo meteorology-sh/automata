@@ -24,7 +24,7 @@ epsilon:
   decay: 0.995
 ```
 
-Do not change `lr`, `tau`, loss function, or gradient clipping without a specific reason. Adjust `epsilon_decay`, `solve_threshold`, and `memory_size` per environment. Scale `memory_size` with `max_episode_steps` — the baseline 10,000 assumes short episodes (~500 steps).
+Do not change `lr`, `tau`, loss function, or gradient clipping without a specific reason. Adjust `epsilon_decay`, `solve_threshold`, and `memory_size` per environment. Scale `memory_size` with `max_episode_steps` — the baseline 10,000 assumes short episodes of about 500 steps.
 
 ## Learning rate and train_every are coupled
 If using `train_every > 1` for speed, reduce `lr` proportionally. `train_every: 4` with `lr: 0.001` is 4x too aggressive — each of the fewer updates overshoots. The original DQN paper used `train_every: 4` with `lr: 0.00025`. The product `lr * (steps_per_episode / train_every)` should stay roughly constant.
@@ -32,9 +32,9 @@ If using `train_every > 1` for speed, reduce `lr` proportionally. `train_every: 
 ## Epsilon min is a tradeoff between noise floor and recovery
 Too high: random actions tank episode scores. With `epsilon_min: 0.05` and 500-step episodes, 25 random actions add enough noise to prevent the rolling average from reaching a high threshold. Rule of thumb: if `epsilon_min * max_episode_steps` exceeds ~5, the noise floor may suppress convergence.
 
-Too low: the agent can't recover from policy collapse. With `epsilon_min: 0.01` and long episodes (1000+ steps), a degraded policy crashes early, short crash episodes fill the replay buffer orders of magnitude faster than long successful ones, and the agent enters a death spiral — the buffer fills with crash data, which trains a crashing policy, which generates more crash data. Low epsilon provides no exploration to escape.
+Too low: the agent can't recover from policy collapse. With `epsilon_min: 0.01` and long episodes of 1000 steps or more, a degraded policy crashes early, short crash episodes fill the replay buffer orders of magnitude faster than long successful ones, and the agent enters a death spiral — the buffer fills with crash data, which trains a crashing policy, which generates more crash data. Low epsilon provides no exploration to escape.
 
-For long episodes, compensate with a larger replay buffer (`memory_size`) so good experiences survive temporary collapses. Scale `memory_size` proportionally to `max_episode_steps` — a 1500-step environment needs at least 4x the buffer of a 500-step one.
+For long episodes, compensate with a larger replay buffer via `memory_size` so good experiences survive temporary collapses. Scale `memory_size` proportionally to `max_episode_steps` — a 1500-step environment needs at least 4x the buffer of a 500-step one.
 
 ## Solve window should match the environment's timescale
 A 100-episode window takes 100+ episodes past convergence to reflect that the agent has solved the environment. Default to 50 episodes — statistically meaningful but responsive. Harder environments with high variance may need a larger window, but never so large that training runs for hundreds of episodes past convergence.
@@ -44,3 +44,29 @@ Set `solve_threshold` conservatively below the expected peak performance. If the
 
 ## Epsilon decay timing
 Epsilon should reach `epsilon_min` at roughly 80% of the episode budget. For 1000 episodes with `epsilon_decay: 0.995`: `0.9 * 0.995^800 = 0.016`. Verify this for each new config.
+
+## Long-horizon keys
+
+These default to a no-op, so they only appear in configs that need them. Reasoning in
+`.claude/rules/exploration-and-credit.md`.
+
+```yaml
+training:
+  double_dqn: true      # keep on; vanilla DQN overestimates and collapses after its peak
+  n_step: 3             # >1 when the payoff arrives hundreds of steps after the action
+  explore_hold: 15      # >1 for coherent exploratory manoeuvres; the big lever on travel tasks
+checkpoints:
+  best_metric: "reward" # or "success", or any numeric info key the env reports
+```
+
+- **Scale `memory_size` with `max_episode_steps`.** A 4000-step task needs a buffer in the
+  hundreds of thousands; the baseline 10,000 assumes ~500-step episodes.
+- **Disable the solve condition when you are not judging by reward.** If `best_metric` is a
+  custom metric, set `solve_threshold` to an unreachable value such as `1000000` so training is
+  never stopped by an average reward that does not measure the task.
+- **`explore_hold` interacts with the blind floor**, not just with learning: held actions make
+  even an untrained policy fly coherent legs, so raise the bar you compare against; see
+  `.claude/rules/evaluation.md`.
+- **Raise `gamma` with the horizon**, 0.995 for thousands of steps, and remember that a high
+  gamma under-credits the act of *continuing* when payouts are sparse — which is a reward
+  frequency problem, not a gamma problem; see `.claude/rules/reward-design.md`.

@@ -14,6 +14,22 @@ class BaseEnv(ABC):
         self.config = config
         self.episode_step = 0
         self.max_steps = config["env"]["max_episode_steps"]
+        # Optional reproducible episode seeding. `env.seed` in config fixes the sequence of
+        # episodes, so an evaluation run is repeatable and two policies can be compared on
+        # the *same* episodes. Always select on one seed and confirm on a disjoint one —
+        # reporting on the seeds a checkpoint was chosen on is winner's curse.
+        self.seed = config["env"].get("seed")
+        self.episode_index = -1
+        self.rng = np.random.default_rng(self.seed)
+
+    def _begin_episode(self) -> int | None:
+        """Call at the top of reset(). Advances the episode counter, reseeds self.rng, and
+        returns this episode's seed (None when env.seed is unset). Subclasses should draw
+        every per-episode randomization from self.rng so the episode is reproducible."""
+        self.episode_index += 1
+        episode_seed = None if self.seed is None else int(self.seed) + self.episode_index
+        self.rng = np.random.default_rng(episode_seed)
+        return episode_seed
 
     @abstractmethod
     def reset(self) -> np.ndarray:
@@ -63,7 +79,7 @@ class GymEnv(BaseEnv):
 
     def reset(self) -> np.ndarray:
         self.episode_step = 0
-        state, _ = self.env.reset()
+        state, _ = self.env.reset(seed=self._begin_episode())
         return state
 
     def step(self, action: int) -> tuple:
