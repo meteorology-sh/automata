@@ -1,8 +1,7 @@
-import os
+from typing import Any
+
 import numpy as np
-import pytest
 import torch
-import yaml
 
 from eval import evaluate
 from core.memory import ReplayBuffer
@@ -14,7 +13,8 @@ from models.mlp import MLP
 from models.cnn import CNN
 
 
-def _minimal_config(env_name="LunarLander-v3", state_size=8, num_actions=4):
+def _minimal_config(env_name: str = "LunarLander-v3", state_size: int = 8,
+                    num_actions: int = 4) -> dict[str, Any]:
     """Build a minimal config dict inline — no file dependency."""
     return {
         "env": {
@@ -157,7 +157,7 @@ def test_gym_env_full_episode():
     steps = 0
     while not done:
         action = 0
-        next_state, reward, done, truncated, info = env.step(action)
+        next_state, _reward, done, truncated, _info = env.step(action)
         done = done or truncated
         steps += 1
         assert isinstance(next_state, np.ndarray)

@@ -62,6 +62,14 @@ per episode, which is the collapse detector. The table also reports `Hact`, acti
 within an episode: a policy near 0 is playing one action and ignoring its observations, however good
 its reward looks. Select a checkpoint on one seed, confirm it on a disjoint one.
 
+### Checks
+
+```bash
+# Tests and the strict type check; both should be clean
+python -m pytest tests/ -q
+python -m pyright --pythonpath venv/bin/python
+```
+
 ## How It Works
 
 A trained policy is produced from three independent inputs:
@@ -118,6 +126,8 @@ tests/            -- test_smoke.py for framework wiring, test_agent.py for agent
 data/             -- the experiment record: one file per finding + INDEX.md
 
 eval.py           -- scorecard: a checkpoint against the blind baselines, with action entropy
+
+pyrightconfig.json -- pyright strict over core, envs, models, tests, main.py, eval.py
 
 checkpoints/      -- saved model weights, local
 ```

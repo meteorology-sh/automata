@@ -1,6 +1,8 @@
 import threading
-import matplotlib.pyplot as plt
 from collections import deque
+from typing import Any
+
+import matplotlib.pyplot as plt
 
 
 class Visualizer:
@@ -16,40 +18,40 @@ class Visualizer:
       - end_episode()  — called once per episode with total reward and epsilon
     """
 
-    def __init__(self, num_actions: int = 0, action_labels: list = None,
-                 maxlen: int = 500, solve_threshold: float = None,
+    def __init__(self, num_actions: int = 0, action_labels: list[str] | None = None,
+                 maxlen: int = 500, solve_threshold: float | None = None,
                  solve_window: int = 50):
         self.maxlen = maxlen
         self.solve_threshold = solve_threshold
         self.solve_window = solve_window
 
-        self._episode_rewards = deque(maxlen=maxlen)
+        self._episode_rewards: deque[float] = deque(maxlen=maxlen)
         self._episode_count = 0
         self._latest_epsilon = 1.0
         self._lock = threading.Lock()
         self._running = False
 
-    def update(self, state, q_values: list):
+    def update(self, state: Any, q_values: list[float]) -> None:
         """Called by the training loop at each step. Thread-safe."""
         pass
 
-    def end_episode(self, total_reward: float, epsilon: float):
+    def end_episode(self, total_reward: float, epsilon: float) -> None:
         """Called by the training loop at the end of each episode. Thread-safe."""
         with self._lock:
             self._episode_rewards.append(total_reward)
             self._episode_count += 1
             self._latest_epsilon = epsilon
 
-    def start(self):
+    def start(self) -> None:
         """Start the dashboard in a background thread."""
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self._running = False
 
-    def _run(self):
+    def _run(self) -> None:
         plt.ion()
         fig, ax = plt.subplots(figsize=(10, 4))
         fig.patch.set_facecolor("#1e1e1e")

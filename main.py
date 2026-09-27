@@ -1,21 +1,24 @@
 import argparse
 import importlib
+from typing import Any
+
 from core.train import load_config, train
 from core.visualizer import Visualizer
-from envs.base_env import GymEnv
+from envs.base_env import BaseEnv, GymEnv
 
 
-def build_env(config: dict):
+def build_env(config: dict[str, Any]) -> BaseEnv:
     """Build the environment from config. Uses GymEnv unless env.wrapper specifies a custom class."""
     wrapper = config["env"].get("wrapper")
     if wrapper is None:
         return GymEnv(config)
     module_path, class_name = wrapper.rsplit(".", 1)
     module = importlib.import_module(module_path)
-    return getattr(module, class_name)(config)
+    env_cls: type[BaseEnv] = getattr(module, class_name)
+    return env_cls(config)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="RL Harness")
     parser.add_argument("--config", type=str, default="configs/default.yaml")
     parser.add_argument("--vis", action="store_true",

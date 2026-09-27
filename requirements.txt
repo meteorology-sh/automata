@@ -4,6 +4,7 @@ mujoco
 numpy
 opencv-python
 pillow
+pyright
 pytest
 pyyaml
 torch

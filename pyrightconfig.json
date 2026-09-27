@@ -1,0 +1,13 @@
+{
+  "include": ["core", "envs", "models", "tests", "main.py", "eval.py"],
+  "exclude": ["venv", "**/node_modules", "**/__pycache__"],
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.12",
+
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownArgumentType": false,
+  "reportMissingTypeStubs": false,
+  "reportMissingModuleSource": "none",
+  "reportPrivateUsage": false
+}

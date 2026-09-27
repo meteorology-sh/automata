@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -26,5 +27,5 @@ class CNN(nn.Module):
             nn.Linear(256, num_actions),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.classifier(self.features(x))

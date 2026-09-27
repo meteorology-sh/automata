@@ -19,6 +19,7 @@ These must be followed at all times:
 - Always save checkpoints to `checkpoints/` using the pattern `{env_name}_{episode}.pt`. Never overwrite the best checkpoint.
 - Reward functions belong in the environment subclass, not in the training loop.
 - All models must accept a `num_actions` argument. Never hardcode action counts.
+- Strict-typed under pyright strict via `pyrightconfig.json`, zero errors. Run it as `venv/bin/python -m pyright --pythonpath venv/bin/python`, or phantom import errors appear.
 - Never judge a policy by average reward, and never on the seeds you selected it on. See `.claude/rules/evaluation.md`.
 - Never store a timeout as a terminal transition. Truncation is the clock, not the MDP.
 - Falsify a design change cheaply before spending a training run on it, and change one lever per run. See `.claude/rules/experiment-method.md`.
@@ -40,6 +41,7 @@ These must be followed at all times:
 | `hyperparameters.md` | canonical baseline and the interaction rules between keys |
 | `training-loop.md` | loop and visualizer invariants |
 | `mujoco.md`, `testing.md`, `venv.md` | simulator, test layout, interpreter |
+| `typing.md` | pyright strict at zero errors, and how to type the untyped boundaries |
 | `long-running-jobs.md` | detached launches, ETAs, never idling the session |
 | `docs-consistency.md` | docs describe the system as it is, stay consistent, and are not changelogs |
 | `version-control.md` | read history freely, never commit unless asked, what stays local |
@@ -80,6 +82,7 @@ data/                 ← the experiment record: one file per finding + INDEX.md
 docs/README.md        ← RL and DQN fundamentals, and what the harness adds
 main.py               ← training entry point
 eval.py               ← scorecard: a checkpoint against the blind baselines, with action entropy
+pyrightconfig.json    ← pyright strict over core, envs, models, tests, main.py, eval.py
 checkpoints/          ← saved model weights, local
 ```
 
@@ -94,6 +97,10 @@ python main.py --config configs/default.yaml --vis    # enable reward dashboard
 
 # Evaluate one checkpoint; renders by default
 python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt
+
+# Checks — both must be clean before handing work back
+python -m pytest tests/ -q
+python -m pyright --pythonpath venv/bin/python
 
 # Score it against the blind baselines on fixed seeds — the honest scorecard
 python eval.py --config configs/default.yaml --checkpoint checkpoints/LunarLander-v3_best.pt \

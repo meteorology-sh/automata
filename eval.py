@@ -28,7 +28,10 @@ from typing import Any
 
 import torch
 
+import torch.nn as nn
+
 from core.train import load_config, build_model, state_to_tensor
+from envs.base_env import BaseEnv
 from main import build_env
 
 POLICIES = ("checkpoint", "random", "hold", "straight")
@@ -37,7 +40,7 @@ POLICIES = ("checkpoint", "random", "hold", "straight")
 class _Policy:
     """Action source with a per-episode reset. Blind baselines ignore the state."""
 
-    def __init__(self, kind: str, num_actions: int, model: Any = None,
+    def __init__(self, kind: str, num_actions: int, model: nn.Module | None = None,
                  model_type: str = "mlp", hold: int = 15):
         self.kind = kind
         self.num_actions = num_actions
@@ -53,6 +56,7 @@ class _Policy:
 
     def act(self, state: Any) -> int:
         if self.kind == "checkpoint":
+            assert self.model is not None, "the 'checkpoint' policy needs a loaded model"
             with torch.no_grad():
                 return int(self.model(state_to_tensor(state, self.model_type)).argmax().item())
         if self.kind == "random":
@@ -66,7 +70,7 @@ class _Policy:
         return self._held
 
 
-def _action_entropy(counts: Counter, num_actions: int) -> float:
+def _action_entropy(counts: Counter[int], num_actions: int) -> float:
     """Normalized Shannon entropy of one episode's action histogram (0 = collapsed)."""
     total = sum(counts.values())
     if total == 0 or num_actions < 2:
@@ -75,7 +79,7 @@ def _action_entropy(counts: Counter, num_actions: int) -> float:
     return h / math.log(num_actions)
 
 
-def _run_policy(env, policy: _Policy, num_episodes: int,
+def _run_policy(env: BaseEnv, policy: _Policy, num_episodes: int,
                 metric: str | None = None) -> dict[str, Any]:
     rewards: list[float] = []
     entropies: list[float] = []
@@ -86,7 +90,7 @@ def _run_policy(env, policy: _Policy, num_episodes: int,
         policy.reset()
         done = False
         total_reward = 0.0
-        counts: Counter = Counter()
+        counts: Counter[int] = Counter()
         info: dict[str, Any] = {}
 
         while not done:
@@ -113,8 +117,8 @@ def _run_policy(env, policy: _Policy, num_episodes: int,
     }
 
 
-def evaluate(env, model, config: dict, num_episodes: int,
-             policy: str = "checkpoint", hold: int = 15,
+def evaluate(env: BaseEnv, model: nn.Module | None, config: dict[str, Any],
+             num_episodes: int, policy: str = "checkpoint", hold: int = 15,
              metric: str | None = None) -> list[float]:
     """Run one policy for num_episodes. Returns the list of episode rewards."""
     p = _Policy(policy, config["model"]["num_actions"], model=model,
@@ -131,7 +135,7 @@ def evaluate(env, model, config: dict, num_episodes: int,
     return stats["rewards"]
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="RL Harness — score a checkpoint against the blind baselines")
     parser.add_argument("--config", type=str, required=True,
@@ -160,7 +164,7 @@ def main():
     if args.seed is not None:
         config["env"]["seed"] = args.seed
 
-    model = None
+    model: nn.Module | None = None
     if "checkpoint" in args.policy:
         if not args.checkpoint:
             parser.error("--checkpoint is required when scoring the 'checkpoint' policy")
@@ -168,7 +172,7 @@ def main():
         model.load_state_dict(torch.load(args.checkpoint, weights_only=True))
         model.eval()
 
-    rows = []
+    rows: list[dict[str, Any]] = []
     for kind in args.policy:
         if args.seed is not None:
             random.seed(args.seed)      # same baseline draws for every policy
