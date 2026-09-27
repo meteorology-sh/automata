@@ -22,6 +22,7 @@ These must be followed at all times:
 - Never judge a policy by average reward, and never on the seeds you selected it on. See `.claude/rules/evaluation.md`.
 - Never store a timeout as a terminal transition. Truncation is the clock, not the MDP.
 - Falsify a design change cheaply before spending a training run on it, and change one lever per run. See `.claude/rules/experiment-method.md`.
+- Decide what is learned and what is ordinary code before training, and check the task fits the platform's budget. See `.claude/rules/task-decomposition.md`.
 
 ### Rule files in `.claude/rules/`
 
@@ -29,6 +30,9 @@ These must be followed at all times:
 |---|---|
 | `dqn-agent.md` | loss, gradient clipping, target network, tensor conversion |
 | `environments.md` | subclassing, render passthrough, the `info` reporting keys, episode seeding |
+| `task-decomposition.md` | what to learn versus what to write as code, layer metrics, budgeting the task |
+| `observation-design.md` | what the policy can see, memory instead of an oracle, the sensor's resolution floor |
+| `platform-model.md` | honest vehicle models: real component data, which limit binds, disturbances, randomization |
 | `reward-design.md` | what to count, one-time vs loiterable payouts, shaping, the per-step arithmetic check |
 | `exploration-and-credit.md` | held exploration, n-step, Double DQN, truncation, curricula |
 | `evaluation.md` | the scorecard: blind floors, action entropy, held-out seeds, hand-coded ceiling |
@@ -37,6 +41,8 @@ These must be followed at all times:
 | `training-loop.md` | loop and visualizer invariants |
 | `mujoco.md`, `testing.md`, `venv.md` | simulator, test layout, interpreter |
 | `long-running-jobs.md` | detached launches, ETAs, never idling the session |
+| `docs-consistency.md` | docs describe the system as it is, stay consistent, and are not changelogs |
+| `version-control.md` | read history freely, never commit unless asked, what stays local |
 | `reporting.md` | run cadence, table-first reports, plain language |
 | `research-record.md` | how findings are recorded in `data/` |
 
@@ -105,6 +111,7 @@ Slash-invocable workflows in `.claude/skills/`:
 
 | Skill | Use it when |
 |---|---|
+| `frame-task` | a physical task is described and nothing exists yet: what to learn, the horizon, the observation, the reward, the ceiling |
 | `new-env` | scaffolding a config for a new environment |
 | `validate-config` | before a run, or when training is unstable or not converging |
 | `solvability-ceiling` | starting a task: measure the hand-coded ceiling and blind floors first |
@@ -113,6 +120,10 @@ Slash-invocable workflows in `.claude/skills/`:
 | `write-finding` | recording a settled result in `data/` |
 
 ### Adding a new environment
+
+Starting from a described task rather than a known environment — a vehicle, a sensor, a goal — run
+`frame-task` first: it settles what is learned versus coded, whether the task fits the episode budget, and
+what the observation and scorecard have to be, before any code exists.
 
 For Gymnasium environments, use `GymEnv` wrapper. For custom physics, subclass `MujocoEnv`:
 
